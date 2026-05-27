@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MNIST Digit Recognizer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        h1 { color: #00adb5; margin-bottom: 5px; }
+        .container { text-align: center; background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        canvas { background: #000000; border: 2px solid #333; border-radius: 8px; cursor: crosshair; }
+        .controls { margin-top: 15px; }
+        button { background: #00adb5; border: none; color: white; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #007c82; }
+        #prediction { font-size: 48px; font-weight: bold; color: #393e46; margin-top: 15px; text-shadow: 0 0 10px rgba(0,173,181,0.3); }
+        .status { color: #888; font-size: 14px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Digit Recognizer</h1>
+    <p>Draw a digit (0-9) inside the box below</p>
+    
+    <canvas id="canvas" width="280" height="280"></canvas>
+    
+    <canvas id="hidden-canvas" width="28" height="28" style="display:none;"></canvas>
+
+    <div class="controls">
+        <button onclick="clearCanvas()">Clear Box</button>
+        <button onclick="predictDigit()">Predict</button>
+    </div>
+
+    <div id="prediction">--</div>
+    <div id="status-text" class="status">Loading model weights...</div>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const hiddenCanvas = document.getElementById('hidden-canvas');
+    const hCtx = hiddenCanvas.getContext('2d');
+    let isDrawing = false;
+
+    // Model parameter containers
+    let w1 = [], b1 = [], w2 = [], b2 = [];
+
+    // Setup Canvas Properties for Drawing
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 16;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Drawing Event Listeners
+    canvas.addEventListener('mousedown', (e) => { isDrawing = true; ctx.beginPath(); draw(e); });
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', () => isDrawing = false);
+    canvas.addEventListener('mouseout', () => isDrawing = false);
+
+    function draw(e) {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+        ctx.stroke();
+    }
+
+    function clearCanvas() {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        document.getElementById('prediction').innerText = '--';
+    }
+    clearCanvas();
+
+    // Helper to fetch CSV text arrays from your GitHub files
+    async function loadTextFile(url) {
+        const response = await fetch(url);
+        const text = await response.text();
+        return text.trim().split('\n').map(row => row.split(',').map(Number));
+    }
+
+    // Load Weights and Biases dynamically when page opens
+    async function initModel() {
+        try {
+            // These pull directly from the same folder where index.html lives
+            w1 = await loadTextFile('w1.txt');
+            b1 = await loadTextFile('b1.txt');
+            w2 = await loadTextFile('w2.txt');
+            b2 = await loadTextFile('b2.txt');
+            document.getElementById('status-text').innerText = "Model loaded successfully! Ready to predict.";
+            document.getElementById('status-text').style.color = "#00adb5";
+        } catch (err) {
+            document.getElementById('status-text').innerText = "Error loading weight files. Make sure text files are uploaded.";
+            document.getElementById('status-text').style.color = "#ff2e63";
+            console.error(err);
+        }
+    }
+    initModel();
+
+    // Core ML Forward Propagation Math Functions
+    function relu(x) { return Math.max(0, x); }
+    
+    function softmax(arr) {
+        const max = Math.max(...arr);
+        const exps = arr.map(x => Math.exp(x - max));
+        const sum = exps.reduce((a, b) => a + b, 0);
+        return exps.map(x => x / sum);
+    }
+
+    function predictDigit() {
+        if (w1.length === 0) return alert("Model parameters not loaded yet!");
+
+        // 1. Downsample drawing from 280x280 down to 28x28 pixels
+        hCtx.fillStyle = 'black';
+        hCtx.fillRect(0, 0, 28, 28);
+        hCtx.drawImage(canvas, 0, 0, 280, 280, 0, 0, 28, 28);
+
+        // 2. Extract Grayscale Pixel Array Data
+        const imgData = hCtx.getImageData(0, 0, 28, 28);
+        let X = [];
+        for (let i = 0; i < imgData.data.length; i += 4) {
+            // Convert RGBA structure into a clean single intensity value normalized to [0, 1]
+            X.push(imgData.data[i] / 255.0);
+        }
+
+        // 3. LAYER 1: Z1 = W1 * X + B1
+        let Z1 = [];
+        for (let i = 0; i < w1.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < w1[i].length; j++) {
+                sum += w1[i][j] * X[j];
+            }
+            Z1.push(sum + b1[i][0]);
+        }
+        let A1 = Z1.map(relu);
+
+        // 4. LAYER 2: Z2 = W2 * A1 + B2
+        let Z2 = [];
+        for (let i = 0; i < w2.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < w2[i].length; j++) {
+                sum += w2[i][j] * A1[j];
+            }
+            Z2.push(sum + b2[i][0]);
+        }
+        let A2 = softmax(Z2);
+
+        // 5. ARGMAX: Find highest probability class
+        let maxIdx = 0;
+        let maxVal = A2[0];
+        for (let i = 1; i < A2.length; i++) {
+            if (A2[i] > maxVal) {
+                maxVal = A2[i];
+                maxIdx = i;
+            }
+        }
+
+        // Display Winning Output Prediction
+        document.getElementById('prediction').innerText = maxIdx;
+    }
+</script>
+</body>
+</html>
