@@ -69,7 +69,7 @@ function forward(x){
     }
     out[i]=sum;
   }
-
+console.log("Output:", out);
   return out.indexOf(Math.max(...out));
 }
 
@@ -82,5 +82,6 @@ function predict(){
   }
 
   let p = forward(x);
+  console.log("Sample input:", x.slice(0,10));
   document.getElementById("result").innerText = "Prediction: "+p;
 }
