@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MNIST Digit Predictor</title>
+  <style>
+    body {
+      text-align: center;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+    }
+
+    canvas {
+      border: 3px solid black;
+      background: white;
+      image-rendering: pixelated;
+      cursor: crosshair;
+    }
+
+    button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    #result {
+      font-size: 24px;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Draw a digit (0–9)</h2>
+
+<canvas id="canvas" width="280" height="280"></canvas>
+<br>
+
+<button onclick="predict()">Predict</button>
+<button onclick="clearCanvas()">Clear</button>
+
+<h3 id="result"></h3>
+
+<script src="script.js"></script>
+
+</body>
+</html>
