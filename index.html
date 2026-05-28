@@ -1,25 +1,167 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>MNIST Predictor</title>
-  <style>
-    body { text-align:center; font-family:Arial; background:#f5f5f5; }
-    canvas { border:3px solid black; background:black; cursor:crosshair; }
-    button { margin:10px; padding:10px 20px; font-size:16px; }
-    #result { font-size:22px; margin-top:15px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Engine Digit Recognizer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #121212; color: #ffffff;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh; margin: 0;
+        }
+        h1 { color: #00adb5; margin-bottom: 5px; }
+        .container { text-align: center; background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        
+        /* Visually scale up the tiny 28x28 matrix canvas crisp and sharp */
+        canvas { 
+            background: #000000; 
+            border: 4px solid #333; 
+            border-radius: 4px; 
+            cursor: crosshair;
+            width: 280px;  
+            height: 280px; 
+            image-rendering: pixelated; 
+        }
+        
+        .controls { margin-top: 15px; }
+        button { background: #00adb5; border: none; color: white; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; transition: 0.2s; margin: 0 5px; }
+        button:hover { background: #007c82; }
+        #prediction { font-size: 72px; font-weight: bold; color: #00adb5; margin-top: 15px; text-shadow: 0 0 10px rgba(0, 173, 181, 0.5); }
+        .status { color: #888; font-size: 14px; margin-top: 10px; font-style: italic; }
+    </style>
 </head>
 <body>
 
-<h2>Draw a digit</h2>
+<div class="container">
+    <h1>Custom Engine Digit Recognizer</h1>
+    <p>Draw inside the exact 28x28 grid below</p>
+    
+    <canvas id="canvas" width="28" height="28"></canvas>
 
-<canvas id="canvas" width="280" height="280"></canvas><br>
+    <div class="controls">
+        <button onclick="clearCanvas()">Clear Grid</button>
+        <button onclick="predictDigit()">Predict</button>
+    </div>
 
-<button id="predictBtn" onclick="predict()" disabled>Predict</button>
-<button onclick="clearCanvas()">Clear</button>
+    <div id="prediction">--</div>
+    <div id="status-text" class="status">Loading JSON weights...</div>
+</div>
 
-<h3 id="result">Loading model...</h3>
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let isDrawing = false;
 
-<script src="script.js"></script>
+    // Parameter holders
+    let w1 = [], b1 = [], w2 = [], b2 = [];
+
+    function clearCanvas() {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, 28, 28);
+        document.getElementById('prediction').innerText = '--';
+    }
+    clearCanvas();
+
+    // Mouse Event Listeners
+    canvas.addEventListener('mousedown', (e) => { isDrawing = true; draw(e); });
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', () => isDrawing = false);
+    canvas.addEventListener('mouseout', () => isDrawing = false);
+
+    function draw(e) {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        
+        const x = Math.floor((e.clientX - rect.left) / (rect.width / 28));
+        const y = Math.floor((e.clientY - rect.top) / (rect.height / 28));
+        
+        // Draw a solid center pixel
+        ctx.fillStyle = 'white';
+        ctx.fillRect(x, y, 1, 1);
+        
+        // Emulate the thick MNIST brush strokes to fix the accuracy gap
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.fillRect(x+1, y, 1, 1); ctx.fillRect(x-1, y, 1, 1);
+        ctx.fillRect(x, y+1, 1, 1); ctx.fillRect(x, y-1, 1, 1);
+        
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(x+1, y+1, 1, 1); ctx.fillRect(x-1, y-1, 1, 1);
+        ctx.fillRect(x+1, y-1, 1, 1); ctx.fillRect(x-1, y+1, 1, 1);
+    }
+
+    // --- LIGHTNING FAST JSON LOADER ---
+    async function initModel() {
+        try {
+            const response = await fetch('weights.json');
+            const data = await response.json();
+            
+            w1 = data.w1; b1 = data.b1;
+            w2 = data.w2; b2 = data.b2;
+            
+            document.getElementById('status-text').innerText = "Scratch model loaded instantly! Ready to test.";
+            document.getElementById('status-text').style.color = "#00adb5";
+        } catch (err) {
+            document.getElementById('status-text').innerText = "Error loading weights.json. Check GitHub files.";
+            document.getElementById('status-text').style.color = "#ff2e63";
+            console.error(err);
+        }
+    }
+    initModel();
+
+    // --- MATH UTILS ---
+    function relu(x) { return Math.max(0, x); }
+    function softmax(arr) {
+        const max = Math.max(...arr);
+        const exps = arr.map(x => Math.exp(x - max));
+        const sum = exps.reduce((a, b) => a + b, 0);
+        return exps.map(x => x / sum);
+    }
+
+    // --- THE CORE PREDICTION ENGINE ---
+    function predictDigit() {
+        if (w1.length === 0) return alert("Model matrices not loaded yet!");
+
+        // 1. Grab raw pixel data from canvas
+        const imgData = ctx.getImageData(0, 0, 28, 28);
+        let X = []; 
+
+        // 2. Extract exactly the Red channel and normalize it to 0.0 - 1.0
+        for (let i = 0; i < imgData.data.length; i += 4) {
+            X.push(imgData.data[i] / 255.0); 
+        }
+
+        // 3. LAYER 1: Z1 = W1 * X + B1 (Column-vector mapping)
+        let Z1 = [];
+        for (let i = 0; i < w1.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < 784; j++) {
+                sum += w1[i][j] * X[j]; 
+            }
+            Z1.push(sum + b1[i][0]);
+        }
+        let A1 = Z1.map(relu);
+
+        // 4. LAYER 2: Z2 = W2 * A1 + B2
+        let Z2 = [];
+        for (let i = 0; i < w2.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < A1.length; j++) {
+                sum += w2[i][j] * A1[j];
+            }
+            Z2.push(sum + b2[i][0]);
+        }
+        let A2 = softmax(Z2);
+
+        // 5. ARGMAX: Find the highest probability
+        let maxIdx = 0, maxVal = A2[0];
+        for (let i = 1; i < A2.length; i++) {
+            if (A2[i] > maxVal) { maxVal = A2[i]; maxIdx = i; }
+        }
+
+        document.getElementById('prediction').innerText = maxIdx;
+    }
+</script>
 </body>
 </html>
