@@ -14,7 +14,7 @@
         h1 { color: #00adb5; margin-bottom: 5px; }
         .container { text-align: center; background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         
-        /* Visually scale up the tiny 28x28 matrix canvas crisp and sharp */
+        /* Visually scale up the tiny 28x28 matrix canvas */
         canvas { 
             background: #000000; 
             border: 4px solid #333; 
@@ -46,7 +46,7 @@
     </div>
 
     <div id="prediction">--</div>
-    <div id="status-text" class="status">Loading JSON weights...</div>
+    <div id="status-text" class="status">Loading text weights...</div>
 </div>
 
 <script>
@@ -54,7 +54,7 @@
     const ctx = canvas.getContext('2d');
     let isDrawing = false;
 
-    // Parameter holders
+    // Parameter holders for your custom scratch model
     let w1 = [], b1 = [], w2 = [], b2 = [];
 
     function clearCanvas() {
@@ -64,7 +64,7 @@
     }
     clearCanvas();
 
-    // Mouse Event Listeners
+    // Mouse Event Listeners for drawing
     canvas.addEventListener('mousedown', (e) => { isDrawing = true; draw(e); });
     canvas.addEventListener('mousemove', draw);
     canvas.addEventListener('mouseup', () => isDrawing = false);
@@ -74,36 +74,50 @@
         if (!isDrawing) return;
         const rect = canvas.getBoundingClientRect();
         
+        // Exact 0-27 coordinate mapping
         const x = Math.floor((e.clientX - rect.left) / (rect.width / 28));
         const y = Math.floor((e.clientY - rect.top) / (rect.height / 28));
         
-        // Draw a solid center pixel
+        // Draw the core bright white pixel
         ctx.fillStyle = 'white';
         ctx.fillRect(x, y, 1, 1);
         
-        // Emulate the thick MNIST brush strokes to fix the accuracy gap
+        // Emulate the thick MNIST brush strokes to boost accuracy
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.fillRect(x+1, y, 1, 1); ctx.fillRect(x-1, y, 1, 1);
         ctx.fillRect(x, y+1, 1, 1); ctx.fillRect(x, y-1, 1, 1);
         
+        // Soft corners
         ctx.fillStyle = 'rgba(255,255,255,0.3)';
         ctx.fillRect(x+1, y+1, 1, 1); ctx.fillRect(x-1, y-1, 1, 1);
         ctx.fillRect(x+1, y-1, 1, 1); ctx.fillRect(x-1, y+1, 1, 1);
     }
 
-    // --- LIGHTNING FAST JSON LOADER ---
+    // --- BULLETPROOF TEXT LOADER ---
+    async function loadTextFile(url) {
+        const response = await fetch(url);
+        const text = await response.text();
+        
+        // Split into rows, and safely filter out any empty trailing lines
+        const lines = text.trim().split('\n').filter(line => line.trim() !== "");
+        
+        return lines.map(row => row.split(',').map(Number));
+    }
+
     async function initModel() {
         try {
-            const response = await fetch('weights.json');
-            const data = await response.json();
+            document.getElementById('status-text').innerText = "Downloading text weights... please wait a few seconds.";
             
-            w1 = data.w1; b1 = data.b1;
-            w2 = data.w2; b2 = data.b2;
+            // Load your 4 specific text files
+            w1 = await loadTextFile('w1.txt');
+            b1 = await loadTextFile('b1.txt');
+            w2 = await loadTextFile('w2.txt');
+            b2 = await loadTextFile('b2.txt');
             
-            document.getElementById('status-text').innerText = "Scratch model loaded instantly! Ready to test.";
+            document.getElementById('status-text').innerText = "Scratch text model loaded! Ready to test.";
             document.getElementById('status-text').style.color = "#00adb5";
         } catch (err) {
-            document.getElementById('status-text').innerText = "Error loading weights.json. Check GitHub files.";
+            document.getElementById('status-text').innerText = "Error loading .txt files. Check exact filenames.";
             document.getElementById('status-text').style.color = "#ff2e63";
             console.error(err);
         }
@@ -128,11 +142,12 @@
         let X = []; 
 
         // 2. Extract exactly the Red channel and normalize it to 0.0 - 1.0
+        // This generates your exact 784-length dataset vector
         for (let i = 0; i < imgData.data.length; i += 4) {
             X.push(imgData.data[i] / 255.0); 
         }
 
-        // 3. LAYER 1: Z1 = W1 * X + B1 (Column-vector mapping)
+        // 3. LAYER 1: Z1 = W1 * X + B1 (Matches your column-vector scratch math)
         let Z1 = [];
         for (let i = 0; i < w1.length; i++) {
             let sum = 0;
