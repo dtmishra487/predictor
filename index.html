@@ -5,14 +5,13 @@
   <style>
     body {
       text-align: center;
-      font-family: Arial, sans-serif;
+      font-family: Arial;
       background: #f5f5f5;
     }
 
     canvas {
       border: 3px solid black;
       background: white;
-      image-rendering: pixelated;
       cursor: crosshair;
     }
 
@@ -20,12 +19,16 @@
       margin: 10px;
       padding: 10px 20px;
       font-size: 16px;
-      cursor: pointer;
     }
 
     #result {
-      font-size: 24px;
+      font-size: 22px;
       margin-top: 15px;
+    }
+
+    #status {
+      color: red;
+      font-size: 14px;
     }
   </style>
 </head>
@@ -40,6 +43,7 @@
 <button onclick="clearCanvas()">Clear</button>
 
 <h3 id="result">Loading model...</h3>
+<p id="status"></p>
 
 <script src="script.js"></script>
 
