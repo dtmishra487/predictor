@@ -2,9 +2,30 @@ let w1_flat, b1, w2_flat, b2;
 
 // Load flat file (one number per line)
 async function loadFlat(file) {
-  let res = await fetch(file);
-  let text = await res.text();
-  return text.trim().split(/\s+/).map(Number);
+  try {
+    console.log("Loading:", file);
+
+    let res = await fetch(file);
+
+    if (!res.ok) {
+      throw new Error(file + " not found");
+    }
+
+    let text = await res.text();
+
+    console.log(file + " loaded, length:", text.length);
+
+    let arr = text.trim().split(/\s+/).map(Number);
+
+    console.log(file + " parsed, values:", arr.length);
+
+    return arr;
+
+  } catch (err) {
+    document.getElementById("prediction").innerText = "Error loading " + file;
+    console.error(err);
+    throw err;
+  }
 }
 
 async function loadWeights() {
