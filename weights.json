@@ -1,0 +1,31 @@
+// --- SAFE TEXT FILE LOADER ---
+    async function loadTextFile(url) {
+        const response = await fetch(url);
+        const text = await response.text();
+        
+        // Split into rows, but FILTER OUT any empty blank lines at the end of the file!
+        const lines = text.trim().split('\n').filter(line => line.trim() !== "");
+        
+        // Convert each row into an array of numbers
+        return lines.map(row => row.split(',').map(Number));
+    }
+
+    async function initModel() {
+        try {
+            document.getElementById('status-text').innerText = "Downloading text weights... please wait a few seconds.";
+            
+            // Load your 4 specific text files
+            w1 = await loadTextFile('w1.txt');
+            b1 = await loadTextFile('b1.txt');
+            w2 = await loadTextFile('w2.txt');
+            b2 = await loadTextFile('b2.txt');
+            
+            document.getElementById('status-text').innerText = "Scratch text model loaded! Ready to test.";
+            document.getElementById('status-text').style.color = "#00adb5";
+        } catch (err) {
+            document.getElementById('status-text').innerText = "Error loading .txt files. Check exact filenames.";
+            document.getElementById('status-text').style.color = "#ff2e63";
+            console.error(err);
+        }
+    }
+    initModel();
