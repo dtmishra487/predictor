@@ -118,12 +118,21 @@
     function predictDigit() {
         if (w1.length === 0) return alert("Model matrices not loaded!");
 
-        // Read pixel channels directly 
-        const imgData = ctx.getImageData(0, 0, 28, 28);
-        let X = [];
-        for (let i = 0; i < imgData.data.length; i += 4) {
-            X.push(imgData.data[i] / 255.0); 
-        }
+        // FIXED SCRIPT: Manually loops row-by-row (y then x) to match MNIST training structure
+const imgData = ctx.getImageData(0, 0, 28, 28);
+let X = new Array(784).fill(0);
+
+for (let y = 0; y < 28; y++) {
+    for (let x = 0; x < 28; x++) {
+        // Calculate the exact 1D index inside the HTML RGBA array
+        let canvasIndex = (y * 28 + x) * 4; 
+        
+        // Calculate the matching 1D index for your NumPy model input vector
+        let modelIndex = y * 28 + x; 
+        
+        X[modelIndex] = imgData.data[canvasIndex] / 255.0;
+    }
+}
 
         // --- FORWARD PASS LAYER 1: Z1 = W1 * X + B1 ---
         let Z1 = [];
