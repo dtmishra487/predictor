@@ -4,7 +4,11 @@ let w1, b1, w2, b2;
 async function load(file) {
   let res = await fetch(file);
   let txt = await res.text();
-  return txt.trim().split(/\s+/).map(Number);
+
+  return txt
+    .trim()
+    .split(/[\s,]+/)   // 🔥 handles BOTH commas + newlines
+    .map(Number);
 }
 
 async function init() {
