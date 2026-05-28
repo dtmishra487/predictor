@@ -37,6 +37,9 @@ async function loadWeights() {
   b2 = await loadFlat("b2.txt");
 
   document.getElementById("prediction").innerText = "Model loaded!";
+
+  // ✅ ENABLE BUTTON HERE
+  document.getElementById("predictBtn").disabled = false;
 }
 
 loadWeights();
