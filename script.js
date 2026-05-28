@@ -1,6 +1,7 @@
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
+// white background
 ctx.fillStyle = "white";
 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -25,13 +26,13 @@ function clearCanvas() {
   document.getElementById("result").innerText = "";
 }
 
-// 🔥 loader with error reporting
+// 🔥 robust loader
 async function loadFlat(file) {
   try {
-    let res = await fetch(file);
+    let res = await fetch("./" + file);
 
     if (!res.ok) {
-      throw new Error(`HTTP error ${res.status} for ${file}`);
+      throw new Error(`HTTP ${res.status}`);
     }
 
     let text = await res.text();
@@ -49,15 +50,24 @@ async function loadFlat(file) {
   }
 }
 
+// 🔥 safe reshape (no freeze)
 function reshape(flat, rows, cols) {
-  if (flat.length !== rows * cols) {
-    throw new Error(`Shape mismatch: expected ${rows*cols}, got ${flat.length}`);
+  let expected = rows * cols;
+
+  if (flat.length < expected) {
+    throw new Error(`Too few values: ${flat.length}, expected ${expected}`);
   }
 
-  let matrix = [];
-  for (let i = 0; i < rows; i++) {
-    matrix.push(flat.slice(i * cols, (i + 1) * cols));
+  if (flat.length > expected) {
+    console.warn("Extra values detected, trimming...");
+    flat = flat.slice(0, expected);
   }
+
+  let matrix = new Array(rows);
+  for (let i = 0; i < rows; i++) {
+    matrix[i] = flat.slice(i * cols, (i + 1) * cols);
+  }
+
   return matrix;
 }
 
@@ -72,12 +82,21 @@ async function loadWeights() {
     let w2_flat = await loadFlat("w2.txt");
     let b2_flat = await loadFlat("b2.txt");
 
+    // 🔍 debug lengths
+    console.log("w1:", w1_flat.length);
+    console.log("b1:", b1_flat.length);
+    console.log("w2:", w2_flat.length);
+    console.log("b2:", b2_flat.length);
+
     document.getElementById("status").innerText = "Reshaping...";
 
     w1 = reshape(w1_flat, 128, 784);
     b1 = b1_flat;
+
     w2 = reshape(w2_flat, 10, 128);
     b2 = b2_flat;
+
+    console.log("Model loaded");
 
     document.getElementById("status").innerText = "Model loaded ✅";
     document.getElementById("result").innerText = "Draw and click Predict";
@@ -108,13 +127,16 @@ function matVecMul(matrix, vec) {
   );
 }
 
+// forward pass
 function forward(x) {
   let z1 = matVecMul(w1, x).map((v, i) => v + b1[i]);
   let a1 = relu(z1);
+
   let z2 = matVecMul(w2, a1).map((v, i) => v + b2[i]);
   return softmax(z2);
 }
 
+// canvas → input
 function getInput() {
   let tempCanvas = document.createElement("canvas");
   tempCanvas.width = 28;
@@ -133,13 +155,21 @@ function getInput() {
   return input;
 }
 
+// predict
 function predict() {
   let input = getInput();
   let out = forward(input);
 
+  console.log("Output:", out);
+
   let max = Math.max(...out);
   let pred = out.indexOf(max);
 
-  document.getElementById("result").innerText =
-    "Prediction: " + pred;
+  if (pred === -1 || isNaN(max)) {
+    document.getElementById("result").innerText =
+      "Prediction failed (NaN issue)";
+  } else {
+    document.getElementById("result").innerText =
+      "Prediction: " + pred;
+  }
 }
