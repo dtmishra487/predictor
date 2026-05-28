@@ -36,9 +36,15 @@
 
 <div class="container">
     <h1>Custom Engine Digit Recognizer</h1>
-    <p>Draw inside the exact 28x28 grid below</p>
+    <p>Draw inside the dashed 20x20 safe zone below</p>
     
-    <canvas id="canvas" width="28" height="28"></canvas>
+    <div style="position: relative; display: inline-block;">
+        <canvas id="canvas" width="28" height="28"></canvas>
+        
+        <div style="position: absolute; top: 14%; left: 14%; width: 71%; height: 71%; 
+                    border: 1px dashed rgba(0, 173, 181, 0.4); pointer-events: none; 
+                    box-sizing: border-box;"></div>
+    </div>
 
     <div class="controls">
         <button onclick="clearCanvas()">Clear Grid</button>
@@ -82,15 +88,12 @@
         ctx.fillStyle = 'white';
         ctx.fillRect(x, y, 1, 1);
         
-        // Emulate the thick MNIST brush strokes to boost accuracy
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        ctx.fillRect(x+1, y, 1, 1); ctx.fillRect(x-1, y, 1, 1);
-        ctx.fillRect(x, y+1, 1, 1); ctx.fillRect(x, y-1, 1, 1);
-        
-        // Soft corners
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillRect(x+1, y+1, 1, 1); ctx.fillRect(x-1, y-1, 1, 1);
-        ctx.fillRect(x+1, y-1, 1, 1); ctx.fillRect(x-1, y+1, 1, 1);
+        // Thinner brush: Softer adjacent pixels, no corners
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.fillRect(x+1, y, 1, 1); 
+        ctx.fillRect(x-1, y, 1, 1);
+        ctx.fillRect(x, y+1, 1, 1); 
+        ctx.fillRect(x, y-1, 1, 1);
     }
 
     // --- BULLETPROOF TEXT LOADER ---
