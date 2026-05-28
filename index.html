@@ -14,7 +14,6 @@
         h1 { color: #00adb5; margin-bottom: 5px; }
         .container { text-align: center; background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         
-        /* Visually scale up the tiny 28x28 matrix canvas */
         canvas { 
             background: #000000; 
             border: 4px solid #333; 
@@ -29,21 +28,17 @@
         button { background: #00adb5; border: none; color: white; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; transition: 0.2s; margin: 0 5px; }
         button:hover { background: #007c82; }
         #prediction { font-size: 72px; font-weight: bold; color: #00adb5; margin-top: 15px; text-shadow: 0 0 10px rgba(0, 173, 181, 0.5); }
-        .status { color: #888; font-size: 14px; margin-top: 10px; font-style: italic; }
+        .status { color: #00adb5; font-size: 14px; margin-top: 10px; font-style: italic; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>Custom Engine Digit Recognizer</h1>
-    <p>Draw inside the dashed 20x20 safe zone below</p>
+    <p>Draw anywhere. The engine auto-centers your input.</p>
     
     <div style="position: relative; display: inline-block;">
         <canvas id="canvas" width="28" height="28"></canvas>
-        
-        <div style="position: absolute; top: 14%; left: 14%; width: 71%; height: 71%; 
-                    border: 1px dashed rgba(0, 173, 181, 0.4); pointer-events: none; 
-                    box-sizing: border-box;"></div>
     </div>
 
     <div class="controls">
@@ -52,16 +47,15 @@
     </div>
 
     <div id="prediction">--</div>
-    <div id="status-text" class="status">Loading text weights...</div>
+    <div id="status-text" class="status">Scratch Engine Online! Ready to Test.</div>
 </div>
+
+<script src="model_weights.js"></script>
 
 <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     let isDrawing = false;
-
-    // Parameter holders for your custom scratch model
-    let w1 = [], b1 = [], w2 = [], b2 = [];
 
     function clearCanvas() {
         ctx.fillStyle = 'black';
@@ -70,7 +64,6 @@
     }
     clearCanvas();
 
-    // Mouse Event Listeners for drawing
     canvas.addEventListener('mousedown', (e) => { isDrawing = true; draw(e); });
     canvas.addEventListener('mousemove', draw);
     canvas.addEventListener('mouseup', () => isDrawing = false);
@@ -79,16 +72,12 @@
     function draw(e) {
         if (!isDrawing) return;
         const rect = canvas.getBoundingClientRect();
-        
-        // Exact 0-27 coordinate mapping
         const x = Math.floor((e.clientX - rect.left) / (rect.width / 28));
         const y = Math.floor((e.clientY - rect.top) / (rect.height / 28));
         
-        // Draw the core bright white pixel
         ctx.fillStyle = 'white';
         ctx.fillRect(x, y, 1, 1);
         
-        // Thinner brush: Softer adjacent pixels, no corners
         ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.fillRect(x+1, y, 1, 1); 
         ctx.fillRect(x-1, y, 1, 1);
@@ -96,38 +85,6 @@
         ctx.fillRect(x, y-1, 1, 1);
     }
 
-    // --- BULLETPROOF TEXT LOADER ---
-    async function loadTextFile(url) {
-        const response = await fetch(url);
-        const text = await response.text();
-        
-        // Split into rows, and safely filter out any empty trailing lines
-        const lines = text.trim().split('\n').filter(line => line.trim() !== "");
-        
-        return lines.map(row => row.split(',').map(Number));
-    }
-
-    async function initModel() {
-        try {
-            document.getElementById('status-text').innerText = "Downloading text weights... please wait a few seconds.";
-            
-            // Load your 4 specific text files
-            w1 = await loadTextFile('w1.txt');
-            b1 = await loadTextFile('b1.txt');
-            w2 = await loadTextFile('w2.txt');
-            b2 = await loadTextFile('b2.txt');
-            
-            document.getElementById('status-text').innerText = "Scratch text model loaded! Ready to test.";
-            document.getElementById('status-text').style.color = "#00adb5";
-        } catch (err) {
-            document.getElementById('status-text').innerText = "Error loading .txt files. Check exact filenames.";
-            document.getElementById('status-text').style.color = "#ff2e63";
-            console.error(err);
-        }
-    }
-    initModel();
-
-    // --- MATH UTILS ---
     function relu(x) { return Math.max(0, x); }
     function softmax(arr) {
         const max = Math.max(...arr);
@@ -136,7 +93,81 @@
         return exps.map(x => x / sum);
     }
 
-    // --- THE AUTO-CENTERING ALGORITHM ---
     function autoCenter(X) {
-        let minX = 28, maxX = -1, minY = 28, maxY = -
+        let minX = 28, maxX = -1, minY = 28, maxY = -1;
+        let hasPixels = false;
+        for (let y = 0; y < 28; y++) {
+            for (let x = 0; x < 28; x++) {
+                if (X[y * 28 + x] > 0) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                    hasPixels = true;
+                }
+            }
+        }
+
+        if (!hasPixels) return X; 
+
+        let boxCenterX = Math.floor((minX + maxX) / 2);
+        let boxCenterY = Math.floor((minY + maxY) / 2);
+        let shiftX = 14 - boxCenterX;
+        let shiftY = 14 - boxCenterY;
+
+        let centeredX = new Array(784).fill(0);
+        for (let y = 0; y < 28; y++) {
+            for (let x = 0; x < 28; x++) {
+                let val = X[y * 28 + x];
+                if (val > 0) {
+                    let newX = x + shiftX;
+                    let newY = y + shiftY;
+                    if (newX >= 0 && newX < 28 && newY >= 0 && newY < 28) {
+                        centeredX[newY * 28 + newX] = val;
+                    }
+                }
+            }
+        }
+        return centeredX;
+    }
+
+    function predictDigit() {
+        // Now it just uses w1, b1, w2, b2 directly from model_weights.js!
+        const imgData = ctx.getImageData(0, 0, 28, 28);
+        let X = []; 
+        for (let i = 0; i < imgData.data.length; i += 4) {
+            X.push(imgData.data[i] / 255.0); 
+        }
+
+        X = autoCenter(X);
+
+        let Z1 = [];
+        for (let i = 0; i < w1.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < 784; j++) {
+                sum += w1[i][j] * X[j]; 
+            }
+            Z1.push(sum + b1[i][0]);
+        }
+        let A1 = Z1.map(relu);
+
+        let Z2 = [];
+        for (let i = 0; i < w2.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < A1.length; j++) {
+                sum += w2[i][j] * A1[j];
+            }
+            Z2.push(sum + b2[i][0]);
+        }
+        let A2 = softmax(Z2);
+
+        let maxIdx = 0, maxVal = A2[0];
+        for (let i = 1; i < A2.length; i++) {
+            if (A2[i] > maxVal) { maxVal = A2[i]; maxIdx = i; }
+        }
+
+        document.getElementById('prediction').innerText = maxIdx;
+    }
+</script>
+</body>
 </html>
