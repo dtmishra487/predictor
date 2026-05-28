@@ -1,115 +1,86 @@
-let w1_flat, b1, w2_flat, b2;
+let w1, b1, w2, b2;
 
-// Load flat file (one number per line)
-async function loadFlat(file) {
+// load file
+async function load(file) {
+  let res = await fetch(file);
+  let txt = await res.text();
+  return txt.trim().split(/\s+/).map(Number);
+}
+
+async function init() {
   try {
-    console.log("Loading:", file);
+    w1 = await load("w1.txt");
+    b1 = await load("b1.txt");
+    w2 = await load("w2.txt");
+    b2 = await load("b2.txt");
 
-    let res = await fetch(file);
-
-    if (!res.ok) {
-      throw new Error(file + " not found");
-    }
-
-    let text = await res.text();
-
-    console.log(file + " loaded, length:", text.length);
-
-    let arr = text.trim().split(/\s+/).map(Number);
-
-    console.log(file + " parsed, values:", arr.length);
-
-    return arr;
-
-  } catch (err) {
-    document.getElementById("prediction").innerText = "Error loading " + file;
-    console.error(err);
-    throw err;
+    document.getElementById("result").innerText = "Model loaded!";
+    document.getElementById("predictBtn").disabled = false;
+  } catch (e) {
+    document.getElementById("result").innerText = "Error loading model";
+    console.error(e);
   }
 }
 
-async function loadWeights() {
-  document.getElementById("prediction").innerText = "Loading model...";
+init();
 
-  w1_flat = await loadFlat("w1.txt");
-  b1 = await loadFlat("b1.txt");
-  w2_flat = await loadFlat("w2.txt");
-  b2 = await loadFlat("b2.txt");
-
-  document.getElementById("prediction").innerText = "Model loaded!";
-
-  // ✅ ENABLE BUTTON HERE
-  document.getElementById("predictBtn").disabled = false;
-}
-
-loadWeights();
-
-// Drawing
+// canvas
 let canvas = document.getElementById("canvas");
 let ctx = canvas.getContext("2d");
 
 ctx.fillStyle = "black";
-ctx.fillRect(0, 0, 280, 280);
+ctx.fillRect(0,0,280,280);
 
-let drawing = false;
+let draw = false;
+canvas.onmousedown = ()=>draw=true;
+canvas.onmouseup = ()=>draw=false;
 
-canvas.onmousedown = () => drawing = true;
-canvas.onmouseup = () => drawing = false;
-
-canvas.onmousemove = (e) => {
-  if (!drawing) return;
-
-  ctx.fillStyle = "white";
+canvas.onmousemove = (e)=>{
+  if(!draw) return;
+  ctx.fillStyle="white";
   ctx.beginPath();
-  ctx.arc(e.offsetX, e.offsetY, 10, 0, 2 * Math.PI);
+  ctx.arc(e.offsetX,e.offsetY,10,0,2*Math.PI);
   ctx.fill();
 };
 
-function clearCanvas() {
-  ctx.fillStyle = "black";
-  ctx.fillRect(0, 0, 280, 280);
+function clearCanvas(){
+  ctx.fillStyle="black";
+  ctx.fillRect(0,0,280,280);
 }
 
-// Forward pass WITHOUT reshape
-function forward(x) {
+// forward pass (NO reshape)
+function forward(x){
   let a1 = new Array(128).fill(0);
 
-  for (let i = 0; i < 128; i++) {
+  for(let i=0;i<128;i++){
     let sum = b1[i];
-    for (let j = 0; j < 784; j++) {
-      sum += w1_flat[i * 784 + j] * x[j];
+    for(let j=0;j<784;j++){
+      sum += w1[i*784 + j] * x[j];
     }
-    a1[i] = Math.max(0, sum);
+    a1[i] = Math.max(0,sum);
   }
 
-  let z2 = new Array(10).fill(0);
+  let out = new Array(10).fill(0);
 
-  for (let i = 0; i < 10; i++) {
+  for(let i=0;i<10;i++){
     let sum = b2[i];
-    for (let j = 0; j < 128; j++) {
-      sum += w2_flat[i * 128 + j] * a1[j];
+    for(let j=0;j<128;j++){
+      sum += w2[i*128 + j] * a1[j];
     }
-    z2[i] = sum;
+    out[i]=sum;
   }
 
-  // Softmax
-  let max = Math.max(...z2);
-  let exps = z2.map(v => Math.exp(v - max));
-  let total = exps.reduce((a, b) => a + b, 0);
-
-  return exps.map(v => v / total);
+  return out.indexOf(Math.max(...out));
 }
 
-function predict() {
-  let img = ctx.getImageData(0, 0, 28, 28);
-  let input = [];
+function predict(){
+  let img = ctx.getImageData(0,0,28,28);
+  let x=[];
 
-  for (let i = 0; i < img.data.length; i += 4) {
-    input.push(1 - img.data[i] / 255);
+  for(let i=0;i<img.data.length;i+=4){
+    x.push(1 - img.data[i]/255);
   }
 
-  let output = forward(input);
-  let pred = output.indexOf(Math.max(...output));
-
-  document.getElementById("prediction").innerText = "Prediction: " + pred;
+  let p = forward(x);
+  document.getElementById("result").innerText = "Prediction: "+p;
 }
