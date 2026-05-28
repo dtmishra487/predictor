@@ -14,6 +14,7 @@
         h1 { color: #00adb5; margin-bottom: 5px; }
         .container { text-align: center; background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         
+        /* Visually scale up the tiny 28x28 matrix canvas */
         canvas { 
             background: #000000; 
             border: 4px solid #333; 
@@ -35,10 +36,14 @@
 
 <div class="container">
     <h1>Custom Engine Digit Recognizer</h1>
-    <p>Draw anywhere. The engine auto-centers your input.</p>
+    <p>Draw inside the dashed 20x20 safe zone below</p>
     
     <div style="position: relative; display: inline-block;">
         <canvas id="canvas" width="28" height="28"></canvas>
+        
+        <div style="position: absolute; top: 14%; left: 14%; width: 71%; height: 71%; 
+                    border: 1px dashed rgba(0, 173, 181, 0.4); pointer-events: none; 
+                    box-sizing: border-box;"></div>
     </div>
 
     <div class="controls">
@@ -54,6 +59,8 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     let isDrawing = false;
+
+    // Parameter holders for your custom scratch model
     let w1 = [], b1 = [], w2 = [], b2 = [];
 
     function clearCanvas() {
@@ -63,6 +70,7 @@
     }
     clearCanvas();
 
+    // Mouse Event Listeners for drawing
     canvas.addEventListener('mousedown', (e) => { isDrawing = true; draw(e); });
     canvas.addEventListener('mousemove', draw);
     canvas.addEventListener('mouseup', () => isDrawing = false);
@@ -71,12 +79,16 @@
     function draw(e) {
         if (!isDrawing) return;
         const rect = canvas.getBoundingClientRect();
+        
+        // Exact 0-27 coordinate mapping
         const x = Math.floor((e.clientX - rect.left) / (rect.width / 28));
         const y = Math.floor((e.clientY - rect.top) / (rect.height / 28));
         
+        // Draw the core bright white pixel
         ctx.fillStyle = 'white';
         ctx.fillRect(x, y, 1, 1);
         
+        // Thinner brush: Softer adjacent pixels, no corners
         ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.fillRect(x+1, y, 1, 1); 
         ctx.fillRect(x-1, y, 1, 1);
@@ -84,35 +96,38 @@
         ctx.fillRect(x, y-1, 1, 1);
     }
 
+    // --- BULLETPROOF TEXT LOADER ---
     async function loadTextFile(url) {
         const response = await fetch(url);
-        
-        // THE FIX: Explicitly check if the file exists before parsing!
-        if (!response.ok) {
-            throw new Error(`Could not find ${url} (GitHub returned a ${response.status} error)`);
-        }
-        
         const text = await response.text();
+        
+        // Split into rows, and safely filter out any empty trailing lines
         const lines = text.trim().split('\n').filter(line => line.trim() !== "");
+        
         return lines.map(row => row.split(',').map(Number));
     }
 
     async function initModel() {
         try {
-            document.getElementById('status-text').innerText = "Downloading text weights... please wait.";
+            document.getElementById('status-text').innerText = "Downloading text weights... please wait a few seconds.";
+            
+            // Load your 4 specific text files
             w1 = await loadTextFile('w1.txt');
             b1 = await loadTextFile('b1.txt');
             w2 = await loadTextFile('w2.txt');
             b2 = await loadTextFile('b2.txt');
-            document.getElementById('status-text').innerText = "Scratch model loaded! Ready to test.";
+            
+            document.getElementById('status-text').innerText = "Scratch text model loaded! Ready to test.";
             document.getElementById('status-text').style.color = "#00adb5";
         } catch (err) {
-            document.getElementById('status-text').innerText = "Error loading .txt files.";
+            document.getElementById('status-text').innerText = "Error loading .txt files. Check exact filenames.";
             document.getElementById('status-text').style.color = "#ff2e63";
+            console.error(err);
         }
     }
     initModel();
 
+    // --- MATH UTILS ---
     function relu(x) { return Math.max(0, x); }
     function softmax(arr) {
         const max = Math.max(...arr);
@@ -121,25 +136,50 @@
         return exps.map(x => x / sum);
     }
 
-    // --- THE AUTO-CENTERING ALGORITHM ---
-    function autoCenter(X) {
-        let minX = 28, maxX = -1, minY = 28, maxY = -1;
-        let hasPixels = false;
+    // --- THE CORE PREDICTION ENGINE ---
+    function predictDigit() {
+        if (w1.length === 0) return alert("Model matrices not loaded yet!");
 
-        // 1. Find the edges of the drawn digit
-        for (let y = 0; y < 28; y++) {
-            for (let x = 0; x < 28; x++) {
-                if (X[y * 28 + x] > 0) {
-                    if (x < minX) minX = x;
-                    if (x > maxX) maxX = x;
-                    if (y < minY) minY = y;
-                    if (y > maxY) maxY = y;
-                    hasPixels = true;
-                }
-            }
+        // 1. Grab raw pixel data from canvas
+        const imgData = ctx.getImageData(0, 0, 28, 28);
+        let X = []; 
+
+        // 2. Extract exactly the Red channel and normalize it to 0.0 - 1.0
+        // This generates your exact 784-length dataset vector
+        for (let i = 0; i < imgData.data.length; i += 4) {
+            X.push(imgData.data[i] / 255.0); 
         }
 
-        if (!hasPixels) return X; // Canvas is empty
+        // 3. LAYER 1: Z1 = W1 * X + B1 (Matches your column-vector scratch math)
+        let Z1 = [];
+        for (let i = 0; i < w1.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < 784; j++) {
+                sum += w1[i][j] * X[j]; 
+            }
+            Z1.push(sum + b1[i][0]);
+        }
+        let A1 = Z1.map(relu);
 
-        // 2. Calculate the center of the drawing
-        let boxCenterX = Math.floor((minX + maxX) / 2
+        // 4. LAYER 2: Z2 = W2 * A1 + B2
+        let Z2 = [];
+        for (let i = 0; i < w2.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < A1.length; j++) {
+                sum += w2[i][j] * A1[j];
+            }
+            Z2.push(sum + b2[i][0]);
+        }
+        let A2 = softmax(Z2);
+
+        // 5. ARGMAX: Find the highest probability
+        let maxIdx = 0, maxVal = A2[0];
+        for (let i = 1; i < A2.length; i++) {
+            if (A2[i] > maxVal) { maxVal = A2[i]; maxIdx = i; }
+        }
+
+        document.getElementById('prediction').innerText = maxIdx;
+    }
+</script>
+</body>
+</html>
