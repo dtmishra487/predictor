@@ -11,24 +11,22 @@
 
     canvas {
       border: 3px solid black;
-      background: white;
+      background: black;
       cursor: crosshair;
+      display: block;
+      margin: auto;
     }
 
     button {
       margin: 10px;
       padding: 10px 20px;
       font-size: 16px;
+      cursor: pointer;
     }
 
     #result {
       font-size: 22px;
       margin-top: 15px;
-    }
-
-    #status {
-      color: red;
-      font-size: 14px;
     }
   </style>
 </head>
@@ -43,10 +41,8 @@
 <button onclick="clearCanvas()">Clear</button>
 
 <h3 id="result">Loading model...</h3>
-<p id="prediction"></p>
 
-
+<script src="script.js"></script>
 
 </body>
-<script src="script.js"></script>
 </html>
